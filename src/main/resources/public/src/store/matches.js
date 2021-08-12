@@ -24,5 +24,14 @@ export const matches = {
         setMatches({ commit }, data) {
             commit('setMatches', data)
         }
+    },
+    getters: {
+        getMatchById: (state) => (matchId) => {
+            if (!matchId) {
+                return null
+            }
+
+            return state.data.find(item => item.id === matchId)
+        }
     }
 }

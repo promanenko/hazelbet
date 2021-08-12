@@ -7,23 +7,19 @@ export const MatchRow = {
         setFirstTeamBet() {
             this.showBetWindow({
                 outcome: 'WIN_1',
-                matchId: this.data.id,
-                team: this.data.firstTeam,
-                coefficient: this.data.winFirst
+                matchId: this.data.id
             })
         },
         setDrawBet() {
             this.showBetWindow({
                 outcome: 'DRAW',
-                coefficient: this.data.draw
+                matchId: this.data.id
             })
         },
         setSecondTeamBet() {
             this.showBetWindow({
                 outcome: 'WIN_2',
                 matchId: this.data.id,
-                team: this.data.secondTeam,
-                coefficient: this.data.winSecond
             })
         },
         ...Vuex.mapActions(['showBetWindow'])

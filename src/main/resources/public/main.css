@@ -51,3 +51,8 @@
     color: #ccc;
     text-decoration: none;
 }
+
+.caption {
+    font-size: 14px;
+    color: #666;
+}

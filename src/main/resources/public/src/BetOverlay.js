@@ -14,8 +14,39 @@ export const BetOverlay = {
         data() {
             return this.$store.state.bet.data
         },
+        coefficient() {
+            switch(this.data.outcome) {
+                case 'WIN_1':
+                    return this.match.winFirst
+                case 'WIN_2':
+                    return this.match.winSecond
+                default:
+                    return this.match.draw
+            }
+        },
+        title() {
+            switch(this.data.outcome) {
+                case 'WIN_1':
+                    return `${this.match.firstTeam} W`
+                case 'WIN_2':
+                    return `${this.match.secondTeam} W`
+                default:
+                    return 'Draw'
+            }
+        },
+        caption() {
+            switch(this.data.outcome) {
+                case 'DRAW':
+                    return ''
+                default:
+                    return `${this.match.firstTeam} - ${this.match.secondTeam}`
+            }
+        },
         possibleWin() {
-            return formatAmount((this.betAmount * 100 * this.data.coefficient * 100) / 10000)
+            return formatAmount((this.betAmount * 100 * this.coefficient * 100) / 10000)
+        },
+        match() {
+            return this.$store.getters.getMatchById(this.data.matchId)
         }
     },
     methods: {
@@ -36,7 +67,7 @@ export const BetOverlay = {
                             matchId: this.data.matchId,
                             outcome: this.data.outcome,
                             amount: this.betAmount,
-                            coefficient: this.data.coefficient
+                            coefficient: this.coefficient
                         })
                     })
 
@@ -69,8 +100,9 @@ export const BetOverlay = {
             <template v-slot:content>
                 <div v-if="!processing">
                     <h2>
-                        {{ data.team ? data.team + " W" :  'Draw' }} {{  data.coef }}
+                        {{ title }} <span class="float-end">{{  coefficient }}</span>
                     </h2>
+                    <span class="caption">{{ caption }}</span>
                     <div class="mb-3">
                         <label for="amount" class="form-label">Amount</label>
                         <input class="form-control" id="amount" v-maska="{ mask: '#*.##'}" v-model="betAmount" />
@@ -80,7 +112,9 @@ export const BetOverlay = {
                 <spinner v-if="processing" />
             </template>
             <template v-slot:footer>
-                <button v-if="!processing" class="btn btn-primary me-2" @click="makeBet" :disabled="processing">Make a bet</button>
+                <button v-if="!processing" class="btn btn-primary me-2" @click="makeBet" :disabled="processing">
+                    Make a bet
+                </button>
             </template>
         </overlay>
     `

@@ -51,6 +51,7 @@ export const Matches = {
                 </tr>
             </thead>
             <tbody>
+                <tr v-if="items.length === 0"><td class="text-center" colspan="7">No data</td></tr>
                 <match-row v-for="(data, index) in items" :key="data.id" :data="data" />
             </tbody>
         </table>
