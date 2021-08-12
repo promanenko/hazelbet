@@ -21,8 +21,10 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.Serializable;
+import java.util.List;
 import java.util.Map;
 
+import static com.hazelcast.hazelbet.service.CoefficientUtil.*;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.INPUT_BETS_IMAP;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.PROCESSED_BETS_IMAP;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.SUSPENDED_MATCHES_IMAP;
@@ -34,12 +36,34 @@ public class Initializer {
 
     private final HazelcastInstance hazelcast;
 
+    private final Map<String, Integer> teamStrength;
+
     @PostConstruct
     public void setUp() {
+        initTeamStrength();
         initMatches();
         initUsers();
         initSuspendedMatches();
         streamInputBets();
+    }
+
+    private void initTeamStrength() {
+        teamStrength.put("Barcelona", 6);
+        teamStrength.put("Madrid", 7);
+        teamStrength.put("Dynamo", 5);
+        teamStrength.put("Zorya", 3);
+        teamStrength.put("Man Utd", 7);
+        teamStrength.put("Arsenal", 5);
+        teamStrength.put("Liverpool", 8);
+        teamStrength.put("Tottenham", 6);
+        teamStrength.put("Bayern", 9);
+        teamStrength.put("Dortmund", 6);
+        teamStrength.put("Milan", 6);
+        teamStrength.put("Juventus", 7);
+        teamStrength.put("Minaj", 2);
+        teamStrength.put("Man City", 9);
+        teamStrength.put("Fenerbahce", 5);
+        teamStrength.put("Besiktas", 5);
     }
 
     private void initUsers() {
@@ -57,15 +81,21 @@ public class Initializer {
     }
 
     private void initMatches() {
+        putMatch(1L, "Barcelona", "Madrid");
+        putMatch(2L, "Dynamo", "Zorya");
+        putMatch(3L, "Man Utd", "Arsenal");
+        putMatch(4L, "Liverpool", "Tottenham");
+        putMatch(5L, "Bayern", "Dortmund");
+        putMatch(6L, "Milan", "Juventus");
+        putMatch(7L, "Minaj", "Man City");
+        putMatch(8L, "Fenerbahce", "Besiktas");
+    }
+
+    private void putMatch(long id, String first, String second) {
+        List<Double> coefs = calculateCoefficients(teamStrength.get(first) - teamStrength.get(second), 0);
+        Match match = Match.builder().id(id).firstTeam(first).secondTeam(second).winFirst(coefs.get(0)).draw(coefs.get(1)).winSecond(coefs.get(2)).build();
         IMap<Long, Match> matches = hazelcast.getMap("matches");
-        matches.put(1L, Match.builder().id(1L).firstTeam("Barcelona").secondTeam("Madrid").winFirst(2.1).draw(2.2).winSecond(1.7).build());
-        matches.put(2L, Match.builder().id(2L).firstTeam("Dynamo").secondTeam("Zorya").winFirst(1.5).draw(2.7).winSecond(3.3).build());
-        matches.put(3L, Match.builder().id(3L).firstTeam("Man Utd").secondTeam("Arsenal").winFirst(1.6).draw(2.4).winSecond(2.8).build());
-        matches.put(4L, Match.builder().id(4L).firstTeam("Liverpool").secondTeam("Tottenham").winFirst(1.5).draw(2.7).winSecond(3.3).build());
-        matches.put(5L, Match.builder().id(5L).firstTeam("Bayern").secondTeam("Dortmund").winFirst(1.45).draw(2.0).winSecond(3.5).build());
-        matches.put(6L, Match.builder().id(6L).firstTeam("Milan").secondTeam("Juventus").winFirst(2.1).draw(2.2).winSecond(1.7).build());
-        matches.put(7L, Match.builder().id(7L).firstTeam("Minaj").secondTeam("Man City").winFirst(7.1).draw(5.8).winSecond(1.1).build());
-        matches.put(8L, Match.builder().id(8L).firstTeam("Fenerbahce").secondTeam("Besiktas").winFirst(1.9).draw(1.9).winSecond(1.9).build());
+        matches.put(id, match);
     }
 
     private void streamInputBets() {
