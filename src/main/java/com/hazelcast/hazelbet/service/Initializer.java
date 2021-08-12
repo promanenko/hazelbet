@@ -30,7 +30,7 @@ import static com.hazelcast.jet.pipeline.JournalInitialPosition.START_FROM_OLDES
 
 @Component
 @RequiredArgsConstructor
-public class Initializer implements Serializable {
+public class Initializer {
 
     private final HazelcastInstance hazelcast;
 
