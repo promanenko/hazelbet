@@ -1,6 +1,7 @@
 package com.hazelcast.hazelbet.service;
 
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.function.FunctionEx;
 import com.hazelcast.hazelbet.controller.model.Bet;
 import com.hazelcast.hazelbet.controller.model.Match;
 import com.hazelcast.hazelbet.controller.model.User;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.Serializable;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.hazelcast.hazelbet.controller.model.MatchOutcome.WIN_1;
@@ -32,7 +34,8 @@ public class Initializer implements Serializable {
         initMatches();
         initUsers();
         initSuspendedMatches();
-        streamBets();
+        streamInputBets();
+        logProcessedBets();
     }
 
     private void initUsers() {
@@ -73,7 +76,7 @@ public class Initializer implements Serializable {
         );
     }
 
-    private void streamBets() {
+    private void streamInputBets() {
         Pipeline pipeline = Pipeline.create();
         pipeline.readFrom(Sources.<String, Bet>mapJournal("inputBets", START_FROM_OLDEST))
                 .withIngestionTimestamps()
@@ -88,6 +91,7 @@ public class Initializer implements Serializable {
                             .outcome(bet.getOutcome())
                             .build();
                 }).setName("assignBetId")
+                .peek().setName("logIncomingBetWithId")
                 .mapUsingIMap("users", ProcessedBet::getUserId, (ProcessedBet processedBet, User user) -> {
                     if (processedBet.getAmount() > user.getBalance()) {
                         processedBet.setRejected(true);
@@ -102,8 +106,17 @@ public class Initializer implements Serializable {
                     }
                     return processedBet;
                 }).setName("checkSuspendedMatches")
-                .writeTo(Sinks.logger());
+                .writeTo(Sinks.map("processedBets", ProcessedBet::getId, FunctionEx.identity()));
         hazelcast.getJet().newJob(pipeline, new JobConfig().setName("processBets"));
+    }
+
+    private void logProcessedBets() {
+        Pipeline pipeline = Pipeline.create();
+        pipeline.readFrom(Sources.<String, Bet>mapJournal("processedBets", START_FROM_OLDEST))
+                .withIngestionTimestamps()
+                .map(Map.Entry::getValue)
+                .writeTo(Sinks.logger());
+        hazelcast.getJet().newJob(pipeline, new JobConfig().setName("logProcessedBets"));
     }
 
 }

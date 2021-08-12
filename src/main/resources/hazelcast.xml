@@ -9,4 +9,7 @@
     <map name="inputBets">
         <event-journal enabled="true"/>
     </map>
+    <map name="processedBets">
+        <event-journal enabled="true"/>
+    </map>
 </hazelcast>
