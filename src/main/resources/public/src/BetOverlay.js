@@ -1,6 +1,7 @@
 import { formatAmount } from './formatters.js';
 import { api } from './api.js'
 
+
 export const BetOverlay = {
     data() {
       return {
@@ -21,10 +22,9 @@ export const BetOverlay = {
         onClose() {
             clearTimeout(this.timer)
             this.betAmount = '10'
+            this.betId = null
+            this.processing = false
             this.hideBetWindow()
-        },
-        startPooling() {
-
         },
         makeBet() {
             (async() => {
