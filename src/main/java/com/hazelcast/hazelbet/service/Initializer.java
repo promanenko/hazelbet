@@ -91,7 +91,6 @@ public class Initializer implements Serializable {
                             .outcome(bet.getOutcome())
                             .build();
                 }).setName("assignBetId")
-                .peek().setName("logIncomingBetWithId")
                 .mapUsingIMap("users", ProcessedBet::getUserId, (ProcessedBet processedBet, User user) -> {
                     if (processedBet.getAmount() > user.getBalance()) {
                         processedBet.setRejected(true);
