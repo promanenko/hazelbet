@@ -2,3 +2,52 @@
     max-width: 1000px;
     margin: 0 auto;
 }
+
+.overlay {
+    top: 0;
+    left: 0;
+    overflow: hidden;
+    position: fixed;
+    height: 100vh;
+    width: 100vw;
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.overlay-content {
+    width: 100%;
+    margin: 20px auto;
+    max-width: 740px;
+    padding: 16px;
+    background: #fff;
+    overflow: auto;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.overlay-footer {
+    padding: 16px 0;
+    border-top: 1px solid #ccc;
+}
+
+.clickable {
+    cursor: pointer;
+}
+
+.warning {
+    color: #c00;
+}
+
+.success {
+    color: #080;
+}
+
+.router-link-active {
+    cursor: not-allowed;
+    color: #ccc;
+    text-decoration: none;
+}
+
+.router-link-active:hover {
+    color: #ccc;
+    text-decoration: none;
+}

@@ -1,3 +1,5 @@
+import { api } from './api.js'
+
 export const Matches = {
     computed: {
         items() {
@@ -11,10 +13,30 @@ export const Matches = {
         }
     },
     methods: {
-      ...Vuex.mapActions(['getMatches'])
+        getMatches() {
+            (async() => {
+                const loadMatches = async() => {
+                    const data = await api('/matches')
+
+                    this.setMatches(data)
+
+                    this.timer = setTimeout(loadMatches, 1000)
+                }
+                try {
+                    loadMatches()
+                } catch (e) {
+                    console.log(e)
+                }
+
+            })()
+        },
+      ...Vuex.mapActions(['setMatches'])
     },
     created() {
         this.getMatches()
+    },
+    unmounted() {
+        clearTimeout(this.timer)
     },
     template: `
         <spinner v-if="loading" />
@@ -22,18 +44,14 @@ export const Matches = {
             <thead>
                 <tr>
                     <th>Match</th>
+                    <th>Score</th>
                     <th>W1</th>
                     <th>X</th>
                     <th>W2</th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="(data, index) in items" :key="index">
-                  <td>{{ data.firstTeam }} - {{ data.secondTeam }}</td>
-                  <td>{{ data.winFirst }}</td>
-                  <td>{{ data.draw }}</td>
-                  <td>{{ data.winSecond }}</td>
-                </tr>
+                <match-row v-for="(data, index) in items" :key="data.id" :data="data" />
             </tbody>
         </table>
     `
