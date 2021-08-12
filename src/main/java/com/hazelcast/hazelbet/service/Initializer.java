@@ -4,6 +4,7 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.function.FunctionEx;
 import com.hazelcast.hazelbet.controller.model.Bet;
 import com.hazelcast.hazelbet.controller.model.Match;
+import com.hazelcast.hazelbet.controller.model.MatchOutcome;
 import com.hazelcast.hazelbet.controller.model.User;
 import com.hazelcast.hazelbet.service.model.ProcessedBet;
 import com.hazelcast.jet.config.JobConfig;
@@ -13,6 +14,9 @@ import com.hazelcast.jet.pipeline.Sources;
 import com.hazelcast.jet.pipeline.StreamSource;
 import com.hazelcast.jet.pipeline.StreamStage;
 import com.hazelcast.map.IMap;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -20,7 +24,10 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import java.io.Serializable;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.hazelcast.hazelbet.controller.model.MatchOutcome.WIN_1;
 import static com.hazelcast.jet.pipeline.JournalInitialPosition.START_FROM_OLDEST;
@@ -67,12 +74,32 @@ public class Initializer implements Serializable {
 
     @Scheduled(fixedDelay = 1000)
     public void mockBets() {
+        IMap<Long, Match> matches = hazelcast.getMap("matches");
+
+        long matchId = ThreadLocalRandom.current().nextLong(1, 9);
+        MatchOutcome outcome = MatchOutcome.values()[ThreadLocalRandom.current().nextInt(0, 3)];
+        Match match = matches.get(matchId);
+        double amount = ThreadLocalRandom.current().nextInt(0, 10) == 0 ? 200 : 10;
+        double coefficient;
+        switch (outcome) {
+            case WIN_1:
+                coefficient = match.getWinFirst();
+                break;
+            case X:
+                coefficient = match.getDraw();
+                break;
+            case WIN_2:
+                coefficient = match.getWinSecond();
+                break;
+            default:
+                coefficient = 0;
+        }
         hazelcast.getMap("inputBets").put(UUID.randomUUID().toString(), Bet.builder()
-                .userId(1L)
-                .matchId(1)
-                .amount(100)
-                .coefficient(1.2)
-                .outcome(WIN_1)
+                .userId(ThreadLocalRandom.current().nextLong(2, 5))
+                .matchId(matchId)
+                .amount(amount)
+                .outcome(outcome)
+                .coefficient(coefficient)
                 .build()
         );
     }
@@ -82,11 +109,11 @@ public class Initializer implements Serializable {
         Pipeline pipeline = Pipeline.create();
         StreamStage<Map.Entry<String, Bet>> inputBetsStreamStage = pipeline.readFrom(inputBetsSource)
                 .withIngestionTimestamps();
-        inputBetsStreamStage
-                .map(stringBetEntry -> stringBetEntry.getKey() + " : " + stringBetEntry.getValue())
-                .setName("Stringify")
-                .writeTo(Sinks.logger())
-                .setName("Log input Bets");
+//        inputBetsStreamStage
+//                .map(stringBetEntry -> stringBetEntry.getKey() + " : " + stringBetEntry.getValue())
+//                .setName("Stringify");
+//                .writeTo(Sinks.logger())
+//                .setName("Log input Bets");
         StreamStage<ProcessedBet> processedBetStreamStage = inputBetsStreamStage.map(stringBetEntry -> {
                     Bet bet = stringBetEntry.getValue();
                     return ProcessedBet.builder()
@@ -115,10 +142,44 @@ public class Initializer implements Serializable {
                     return processedBet;
                 })
                 .setName("Check suspended matches");
-        processedBetStreamStage.writeTo(Sinks.logger())
-                .setName("Log processed bets");
-        processedBetStreamStage.writeTo(Sinks.map("processedBets", ProcessedBet::getId, FunctionEx.identity()));
+//        processedBetStreamStage.writeTo(Sinks.logger())
+//                .setName("Log processed bets");
+
+        processedBetStreamStage
+                .filter(ProcessedBet::isRejected).setName("If rejected")
+                .writeTo(Sinks.map("processedBets", ProcessedBet::getId, FunctionEx.identity()));
+
+        processedBetStreamStage
+                .filter(processedBet -> !processedBet.isRejected())
+                .groupingKey(ProcessedBet::getMatchId)
+                .mapStateful(() -> new double[3], (accumulator, matchId, processedBet) -> {
+                    switch (processedBet.getOutcome()) {
+                        case WIN_1:
+                            accumulator[0] += processedBet.getAmount();
+                            break;
+                        case X:
+                            accumulator[1] += processedBet.getAmount();
+                            break;
+                        case WIN_2:
+                            accumulator[2] += processedBet.getAmount();
+                            break;
+                        default:
+                    }
+                    return new CombinedBet(processedBet, accumulator[0], accumulator[1], accumulator[2]);
+                })
+                .writeTo(Sinks.logger());
+
         hazelcast.getJet().newJob(pipeline, new JobConfig().setName("processBets"));
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class CombinedBet {
+        ProcessedBet bet;
+        double sumWin1;
+        double sumX;
+        double sumWin2;
     }
 
 }
