@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,7 +24,7 @@ public class BetController {
     private HazelcastInstance hazelcast;
 
     @PostMapping
-    public SubmitBetResponse submitBet(Bet inputBet) {
+    public SubmitBetResponse submitBet(@RequestBody Bet inputBet) {
         long userId = 1L; // for now allow only one active user
         String betId = UUID.randomUUID().toString();
         inputBet.setId(betId);

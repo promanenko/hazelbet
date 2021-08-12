@@ -146,7 +146,7 @@ public class Initializer implements Serializable {
 //                .setName("Log processed bets");
 
         processedBetStreamStage
-                .filter(ProcessedBet::isRejected).setName("If rejected")
+//                .filter(ProcessedBet::isRejected).setName("If rejected") // TODO write non-rejected bets when all checks passed
                 .writeTo(Sinks.map("processedBets", ProcessedBet::getId, FunctionEx.identity()));
 
         processedBetStreamStage
