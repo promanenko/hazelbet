@@ -21,7 +21,7 @@ public class MockEventsGenerator {
 
     private final HazelcastInstance hazelcast;
 
-    @Scheduled(initialDelay = 1000, fixedDelay = 5000)
+    @Scheduled(initialDelay = 1000, fixedDelay = 20000)
     public void updateMatchScores() {
         IMap<Long, Match> matches = hazelcast.getMap(MATCHES_IMAP);
         long matchId = ThreadLocalRandom.current().nextLong(1, 9);

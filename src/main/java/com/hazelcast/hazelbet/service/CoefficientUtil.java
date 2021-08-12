@@ -27,8 +27,8 @@ public class CoefficientUtil {
         }
     }
 
-    private static List<Integer> getProbabilities(int teamStrengthDiff, int goalsDiff) {
-        int totalDifference = teamStrengthDiff + goalsDiff * 2;
+    public static List<Integer> getProbabilities(int teamStrengthDiff, int goalsDiff) {
+        int totalDifference = teamStrengthDiff + goalsDiff * 3;
         List<Integer> result;
         switch (Math.abs(totalDifference)) {
             case 0:

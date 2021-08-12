@@ -1,13 +1,13 @@
 package com.hazelcast.hazelbet.controller.model;
 
 import lombok.Builder;
-import lombok.Value;
+import lombok.Data;
 
 import java.io.Serializable;
 
-import static com.hazelcast.hazelbet.controller.model.MatchOutcomeTrend.*;
+import static com.hazelcast.hazelbet.controller.model.MatchOutcomeTrend.STABLE;
 
-@Value
+@Data
 @Builder(toBuilder = true)
 public class Match implements Comparable<Match>, Serializable {
 
@@ -17,6 +17,8 @@ public class Match implements Comparable<Match>, Serializable {
     double winFirst;
     double draw;
     double winSecond;
+    int firstStrength;
+    int secondStrength;
     @Builder.Default
     MatchOutcomeTrend winFirstTrend = STABLE;
     @Builder.Default
@@ -40,5 +42,13 @@ public class Match implements Comparable<Match>, Serializable {
             return MatchOutcome.WIN_1;
         else
             return MatchOutcome.WIN_2;
+    }
+
+    public int getStrengthDiff() {
+        return firstStrength - secondStrength;
+    }
+
+    public int getGoalsDiff() {
+        return firstScored - secondScored;
     }
 }

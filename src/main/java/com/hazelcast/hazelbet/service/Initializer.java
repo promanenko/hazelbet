@@ -4,6 +4,8 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.function.FunctionEx;
 import com.hazelcast.hazelbet.controller.model.Bet;
 import com.hazelcast.hazelbet.controller.model.Match;
+import com.hazelcast.hazelbet.controller.model.MatchOutcome;
+import com.hazelcast.hazelbet.controller.model.MatchOutcomeTrend;
 import com.hazelcast.hazelbet.controller.model.User;
 import com.hazelcast.hazelbet.service.model.ProcessedBet;
 import com.hazelcast.jet.config.JobConfig;
@@ -21,11 +23,15 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.Serializable;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-import static com.hazelcast.hazelbet.service.CoefficientUtil.*;
+import static com.hazelcast.hazelbet.service.CoefficientUtil.calculateCoefficients;
+import static com.hazelcast.hazelbet.service.CoefficientUtil.getProbabilities;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.INPUT_BETS_IMAP;
+import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.MATCHES_IMAP;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.PROCESSED_BETS_IMAP;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.SUSPENDED_MATCHES_IMAP;
 import static com.hazelcast.jet.pipeline.JournalInitialPosition.START_FROM_OLDEST;
@@ -92,8 +98,13 @@ public class Initializer {
     }
 
     private void putMatch(long id, String first, String second) {
-        List<Double> coefs = calculateCoefficients(teamStrength.get(first) - teamStrength.get(second), 0);
-        Match match = Match.builder().id(id).firstTeam(first).secondTeam(second).winFirst(coefs.get(0)).draw(coefs.get(1)).winSecond(coefs.get(2)).build();
+        Integer firstStrength = teamStrength.get(first);
+        Integer secondStrength = teamStrength.get(second);
+        List<Double> coefs = calculateCoefficients(firstStrength - secondStrength, 0);
+        Match match = Match.builder().id(id).firstTeam(first).secondTeam(second)
+                .firstStrength(firstStrength).secondStrength(secondStrength)
+                .winFirst(coefs.get(0)).draw(coefs.get(1)).winSecond(coefs.get(2))
+                .build();
         IMap<Long, Match> matches = hazelcast.getMap("matches");
         matches.put(id, match);
     }
@@ -109,17 +120,17 @@ public class Initializer {
 //                .writeTo(Sinks.logger())
 //                .setName("Log input Bets");
         StreamStage<ProcessedBet> processedBetStreamStage = inputBetsStreamStage.map(stringBetEntry -> {
-                    Bet bet = stringBetEntry.getValue();
-                    return ProcessedBet.builder()
-                            .id(stringBetEntry.getKey())
-                            .createdAt(bet.getCreateAt())
-                            .amount(bet.getAmount())
-                            .userId(bet.getUserId())
-                            .matchId(bet.getMatchId())
-                            .coefficient(bet.getCoefficient())
-                            .outcome(bet.getOutcome())
-                            .build();
-                })
+            Bet bet = stringBetEntry.getValue();
+            return ProcessedBet.builder()
+                    .id(stringBetEntry.getKey())
+                    .createdAt(bet.getCreateAt())
+                    .amount(bet.getAmount())
+                    .userId(bet.getUserId())
+                    .matchId(bet.getMatchId())
+                    .coefficient(bet.getCoefficient())
+                    .outcome(bet.getOutcome())
+                    .build();
+        })
                 .setName("Assign processed bet id")
                 .mapUsingIMap("users", ProcessedBet::getUserId, (ProcessedBet processedBet, User user) -> {
                     if (processedBet.getAmount() > user.getBalance()) {
@@ -144,7 +155,7 @@ public class Initializer {
 //                .filter(ProcessedBet::isRejected).setName("If rejected") // TODO write non-rejected bets when all checks passed
                 .writeTo(Sinks.map(PROCESSED_BETS_IMAP, ProcessedBet::getId, FunctionEx.identity()));
 
-        processedBetStreamStage
+        StreamStage<Match> recalculateCoefsStage = processedBetStreamStage
                 .filter(processedBet -> !processedBet.isRejected())
                 .groupingKey(ProcessedBet::getMatchId)
                 .mapStateful(() -> new double[4], (accumulator, matchId, processedBet) -> {
@@ -163,24 +174,50 @@ public class Initializer {
                     accumulator[3] += processedBet.getAmount();
                     return new CombinedBet(processedBet, accumulator[0], accumulator[1], accumulator[2], accumulator[3]);
                 })
-//                .mapUsingIMap("matches", (CombinedBet it) -> it.getBet()::getMatchId, (CombinedBet bet, Match match) -> {
-//                    MatchOutcome currentOutcome = match.getOutcome();
-//                    double[] coefs = new double[3];
-//                    switch (currentOutcome) {
-//                        case X:
-//                            double toPay = bet.getSumX();
-//                            double toReceive = bet.getTotal();
-//                            if (toPay > toReceive) {
-//                                coefs[0] = ;// win1
-//                                coefs[1] = match.getDraw() ;// x
-//                                coefs[2] =  ;// win2
-//                            }
-//                            break;
-//                    }
-//                    return coefs;
-//                }) // recalculate new coef
+                .mapUsingIMap("matches", (CombinedBet it) -> it.getBet().getMatchId(), (CombinedBet bet, Match match) -> {
+                    // get realistic coefficients
+                    List<Integer> probabilities = getProbabilities(match.getStrengthDiff(), match.getGoalsDiff());
+                    double win1Loss = bet.getSumWin1() * probabilities.get(0) / 100;
+                    double drawLoss = bet.getSumX() * probabilities.get(1) / 100;
+                    double win2Loss = bet.getSumWin2() * probabilities.get(2) / 100;
+                    double currentMargin = (bet.getTotal() - win1Loss - drawLoss - win2Loss) / bet.getTotal();
+//                    if (currentMargin < 0.2) {
+                        // what contributes to our lost the most ?
+                        Map<MatchOutcome, Double> outcomesToLosses =
+                                Map.of(MatchOutcome.WIN_1, win1Loss, MatchOutcome.DRAW, drawLoss, MatchOutcome.WIN_2, win2Loss);
+                        List<MatchOutcome> outcomesByImpact = outcomesToLosses.entrySet().stream()
+                                .sorted(Map.Entry.comparingByValue())
+                                .map(Map.Entry::getKey)
+                                .sorted(Collections.reverseOrder())
+                                .collect(Collectors.toList());
+                        List<Double> newCoefficients = calculateCoefficients(match.getStrengthDiff(), match.getGoalsDiff());
+                        // decrease coefficients for the first two results with the biggest impact
+                        int biggestOrdinal = outcomesByImpact.get(0).ordinal();
+                        newCoefficients.set(biggestOrdinal, newCoefficients.get(biggestOrdinal) * 0.8);
+                        int secondOrdinal = outcomesByImpact.get(1).ordinal();
+                        newCoefficients.set(secondOrdinal, newCoefficients.get(secondOrdinal) * 0.9);
 
+                        // update coefs
+                        match.setWinFirst(newCoefficients.get(0));
+                        match.setDraw(newCoefficients.get(1));
+                        match.setWinSecond(newCoefficients.get(2));
+//                    }
+                    return match;
+                }).setName("Recalculate coefficients");
+
+        recalculateCoefsStage
                 .writeTo(Sinks.logger());
+
+        recalculateCoefsStage
+                .writeTo(Sinks.mapWithUpdating(MATCHES_IMAP, Match::getId, (Match oldMatch, Match newMatch) -> {
+                    oldMatch.setWinFirstTrend(MatchOutcomeTrend.fromDiff(newMatch.getWinFirst() - oldMatch.getWinFirst()));
+                    oldMatch.setWinFirst(newMatch.getWinFirst());
+                    oldMatch.setDrawTrend(MatchOutcomeTrend.fromDiff(newMatch.getDraw() - oldMatch.getDraw()));
+                    oldMatch.setDraw(newMatch.getDraw());
+                    oldMatch.setWinSecondTrend(MatchOutcomeTrend.fromDiff(newMatch.getWinSecond() - oldMatch.getWinSecond()));
+                    oldMatch.setWinSecond(newMatch.getWinSecond());
+                    return oldMatch;
+                }));
 
         hazelcast.getJet().newJob(pipeline, new JobConfig().setName("processBets"));
     }
@@ -188,7 +225,7 @@ public class Initializer {
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
-    public static class CombinedBet {
+    public static class CombinedBet implements Serializable {
         ProcessedBet bet;
         double sumWin1;
         double sumX;
