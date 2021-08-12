@@ -38,13 +38,11 @@ public class BetController {
         Long userId = 1L; // for now allow only one active user
         return hazelcast.<Long, ProcessedBet>getMap("processedBets").values().stream()
                 .filter(bet -> userId.equals(bet.getUserId()))
-                .sorted()
                 .collect(Collectors.toList());
     }
 
     @GetMapping(path = "/{betId}")
     public ProcessedBet getBet(@PathVariable String betId) {
-        Long userId = 1L; // for now allow only one active user
         return hazelcast.<String, ProcessedBet>getMap("processedBets").get(betId);
     }
 
