@@ -5,6 +5,8 @@ import lombok.Value;
 
 import java.io.Serializable;
 
+import static com.hazelcast.hazelbet.controller.model.MatchOutcomeTrend.*;
+
 @Value
 @Builder
 public class Match implements Comparable<Match>, Serializable {
@@ -15,6 +17,9 @@ public class Match implements Comparable<Match>, Serializable {
     double winFirst;
     double draw;
     double winSecond;
+    MatchOutcomeTrend winFirstTrend = STABLE;
+    MatchOutcomeTrend drawTrend = STABLE;
+    MatchOutcomeTrend winSecondTrend = STABLE;
     int firstScored = 0;
     int secondScored = 0;
 
