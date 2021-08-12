@@ -9,7 +9,7 @@ import java.io.Serializable;
 @Builder
 public class Bet implements Serializable {
 
-    long userId = 1;
+    long userId;
     long matchId;
     MatchOutcome outcome;
     double amount;

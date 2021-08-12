@@ -1,15 +1,13 @@
 package com.hazelcast.hazelbet.service;
 
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.function.BiFunctionEx;
-import com.hazelcast.function.FunctionEx;
 import com.hazelcast.hazelbet.controller.model.Bet;
 import com.hazelcast.hazelbet.controller.model.Match;
+import com.hazelcast.hazelbet.controller.model.User;
 import com.hazelcast.hazelbet.service.model.ProcessedBet;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.Sinks;
 import com.hazelcast.jet.pipeline.Sources;
-import com.hazelcast.hazelbet.controller.model.User;
 import com.hazelcast.map.IMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,7 +15,6 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.Serializable;
-import java.util.Map;
 import java.util.UUID;
 
 import static com.hazelcast.hazelbet.controller.model.MatchOutcome.WIN_1;
@@ -33,6 +30,7 @@ public class Initializer implements Serializable {
     public void setUp() {
         initMatches();
         initUsers();
+        initSuspendedMatches();
         streamBets();
     }
 
@@ -43,6 +41,11 @@ public class Initializer implements Serializable {
         users.put(3L, new User(3L, "dummy_user_3", 500_000));
         users.put(4L, new User(4L, "dummy_user_4", 500_000));
         users.put(5L, new User(5L, "dummy_user_5", 500_000));
+    }
+
+    private void initSuspendedMatches() {
+        IMap<Long, Long> suspendedMatches = hazelcast.getMap("suspendedMatches");
+        suspendedMatches.put(1L, 1L);
     }
 
     private void initMatches() {
@@ -60,7 +63,8 @@ public class Initializer implements Serializable {
     @Scheduled(fixedDelay = 1000)
     public void mockBets() {
         hazelcast.getMap("inputBets").put(UUID.randomUUID().toString(), Bet.builder()
-                .matchId(5)
+                .userId(1)
+                .matchId(1)
                 .amount(100)
                 .coefficient(1.2)
                 .outcome(WIN_1)
@@ -87,6 +91,13 @@ public class Initializer implements Serializable {
                     if (processedBet.getAmount() > user.getBalance()) {
                         processedBet.setRejected(true);
                         processedBet.setReason("No money");
+                    }
+                    return processedBet;
+                })
+                .mapUsingIMap("suspendedMatches", ProcessedBet::getMatchId, (ProcessedBet processedBet, Long match) -> {
+                    if (match != null) {
+                        processedBet.setRejected(true);
+                        processedBet.setReason("Match is suspended");
                     }
                     return processedBet;
                 })
