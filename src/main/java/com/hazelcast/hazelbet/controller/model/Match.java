@@ -27,4 +27,10 @@ public class Match implements Comparable<Match>, Serializable {
     public int compareTo(Match o) {
         return Long.compare(id, o.getId());
     }
+
+    public MatchOutcome getOutcome() {
+        if (firstScored == secondScored) return MatchOutcome.X;
+        if (firstScored > secondScored) return MatchOutcome.WIN_1;
+        else return MatchOutcome.WIN_2;
+    }
 }

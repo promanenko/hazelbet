@@ -152,21 +152,39 @@ public class Initializer implements Serializable {
         processedBetStreamStage
                 .filter(processedBet -> !processedBet.isRejected())
                 .groupingKey(ProcessedBet::getMatchId)
-                .mapStateful(() -> new double[3], (accumulator, matchId, processedBet) -> {
+                .mapStateful(() -> new double[4], (accumulator, matchId, processedBet) -> {
                     switch (processedBet.getOutcome()) {
                         case WIN_1:
-                            accumulator[0] += processedBet.getAmount();
+                            accumulator[0] += processedBet.getAmount() * processedBet.getCoefficient();
                             break;
                         case X:
-                            accumulator[1] += processedBet.getAmount();
+                            accumulator[1] += processedBet.getAmount() * processedBet.getCoefficient();
                             break;
                         case WIN_2:
-                            accumulator[2] += processedBet.getAmount();
+                            accumulator[2] += processedBet.getAmount() * processedBet.getCoefficient();
                             break;
                         default:
                     }
-                    return new CombinedBet(processedBet, accumulator[0], accumulator[1], accumulator[2]);
+                    accumulator[3] += processedBet.getAmount();
+                    return new CombinedBet(processedBet, accumulator[0], accumulator[1], accumulator[2], accumulator[3]);
                 })
+//                .mapUsingIMap("matches", (CombinedBet it) -> it.getBet()::getMatchId, (CombinedBet bet, Match match) -> {
+//                    MatchOutcome currentOutcome = match.getOutcome();
+//                    double[] coefs = new double[3];
+//                    switch (currentOutcome) {
+//                        case X:
+//                            double toPay = bet.getSumX();
+//                            double toReceive = bet.getTotal();
+//                            if (toPay > toReceive) {
+//                                coefs[0] = ;// win1
+//                                coefs[1] = match.getDraw() ;// x
+//                                coefs[2] =  ;// win2
+//                            }
+//                            break;
+//                    }
+//                    return coefs;
+//                }) // recalculate new coef
+
                 .writeTo(Sinks.logger());
 
         hazelcast.getJet().newJob(pipeline, new JobConfig().setName("processBets"));
@@ -180,6 +198,7 @@ public class Initializer implements Serializable {
         double sumWin1;
         double sumX;
         double sumWin2;
+        double total;
     }
 
 }
