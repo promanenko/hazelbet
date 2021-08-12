@@ -1,15 +1,20 @@
 package com.hazelcast.hazelbet.controller.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Value;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 
-@Value
+@Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Bet implements Serializable {
 
-    long userId;
+    String id;
+    Long userId;
     long matchId;
     MatchOutcome outcome;
     double amount;

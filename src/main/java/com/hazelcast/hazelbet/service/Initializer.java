@@ -67,7 +67,7 @@ public class Initializer implements Serializable {
     @Scheduled(fixedDelay = 1000)
     public void mockBets() {
         hazelcast.getMap("inputBets").put(UUID.randomUUID().toString(), Bet.builder()
-                .userId(1)
+                .userId(1L)
                 .matchId(1)
                 .amount(100)
                 .coefficient(1.2)
