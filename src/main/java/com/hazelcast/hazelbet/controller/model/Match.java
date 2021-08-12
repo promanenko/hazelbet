@@ -8,7 +8,7 @@ import java.io.Serializable;
 import static com.hazelcast.hazelbet.controller.model.MatchOutcomeTrend.*;
 
 @Value
-@Builder
+@Builder(toBuilder = true)
 public class Match implements Comparable<Match>, Serializable {
 
     long id;
@@ -17,10 +17,15 @@ public class Match implements Comparable<Match>, Serializable {
     double winFirst;
     double draw;
     double winSecond;
+    @Builder.Default
     MatchOutcomeTrend winFirstTrend = STABLE;
+    @Builder.Default
     MatchOutcomeTrend drawTrend = STABLE;
+    @Builder.Default
     MatchOutcomeTrend winSecondTrend = STABLE;
+    @Builder.Default
     int firstScored = 0;
+    @Builder.Default
     int secondScored = 0;
 
     @Override
@@ -29,8 +34,11 @@ public class Match implements Comparable<Match>, Serializable {
     }
 
     public MatchOutcome getOutcome() {
-        if (firstScored == secondScored) return MatchOutcome.X;
-        if (firstScored > secondScored) return MatchOutcome.WIN_1;
-        else return MatchOutcome.WIN_2;
+        if (firstScored == secondScored)
+            return MatchOutcome.X;
+        if (firstScored > secondScored)
+            return MatchOutcome.WIN_1;
+        else
+            return MatchOutcome.WIN_2;
     }
 }

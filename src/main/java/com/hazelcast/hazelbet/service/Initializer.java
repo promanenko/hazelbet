@@ -2,6 +2,7 @@ package com.hazelcast.hazelbet.service;
 
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.function.FunctionEx;
+import com.hazelcast.function.ToLongFunctionEx;
 import com.hazelcast.hazelbet.controller.model.Bet;
 import com.hazelcast.hazelbet.controller.model.Match;
 import com.hazelcast.hazelbet.controller.model.MatchOutcome;
@@ -72,6 +73,18 @@ public class Initializer implements Serializable {
         matches.put(8L, Match.builder().id(8L).firstTeam("Fenerbahce").secondTeam("Besiktas").winFirst(1.9).draw(1.9).winSecond(1.9).build());
     }
 
+    @Scheduled(fixedDelay = 5000)
+    public void updateMatchScores() {
+        IMap<Long, Match> matches = hazelcast.getMap("matches");
+        long matchId = ThreadLocalRandom.current().nextLong(1, 9);
+        Match match = matches.get(matchId);
+        if (ThreadLocalRandom.current().nextBoolean()) {
+            match.toBuilder().firstScored(match.getFirstScored() + 1);
+        } else {
+            match.toBuilder().secondScored(match.getSecondScored() + 1);
+        }
+    }
+
     @Scheduled(fixedDelay = 1000)
     public void mockBets() {
         IMap<Long, Match> matches = hazelcast.getMap("matches");
@@ -94,8 +107,10 @@ public class Initializer implements Serializable {
             default:
                 coefficient = 0;
         }
-        hazelcast.getMap("inputBets").put(UUID.randomUUID().toString(), Bet.builder()
-                .userId(ThreadLocalRandom.current().nextLong(2, 5))
+        String betId = UUID.randomUUID().toString();
+        hazelcast.getMap("inputBets").put(betId, Bet.builder()
+                .id(betId)
+                .userId(ThreadLocalRandom.current().nextLong(1, 5))
                 .matchId(matchId)
                 .amount(amount)
                 .outcome(outcome)
@@ -108,7 +123,7 @@ public class Initializer implements Serializable {
         StreamSource<Map.Entry<String, Bet>> inputBetsSource = Sources.mapJournal("inputBets", START_FROM_OLDEST);
         Pipeline pipeline = Pipeline.create();
         StreamStage<Map.Entry<String, Bet>> inputBetsStreamStage = pipeline.readFrom(inputBetsSource)
-                .withIngestionTimestamps();
+                .withTimestamps(entry -> entry.getValue().getCreateAt(), 1000);
 //        inputBetsStreamStage
 //                .map(stringBetEntry -> stringBetEntry.getKey() + " : " + stringBetEntry.getValue())
 //                .setName("Stringify");
@@ -118,6 +133,7 @@ public class Initializer implements Serializable {
                     Bet bet = stringBetEntry.getValue();
                     return ProcessedBet.builder()
                             .id(stringBetEntry.getKey())
+                            .createdAt(bet.getCreateAt())
                             .amount(bet.getAmount())
                             .userId(bet.getUserId())
                             .matchId(bet.getMatchId())

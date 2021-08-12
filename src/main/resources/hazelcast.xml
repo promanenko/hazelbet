@@ -10,6 +10,13 @@
         <event-journal enabled="true"/>
     </map>
     <map name="processedBets">
+        <indexes>
+            <index type="HASH">
+                <attributes>
+                    <attribute>userId</attribute>
+                </attributes>
+            </index>
+        </indexes>
         <event-journal enabled="true"/>
     </map>
 </hazelcast>

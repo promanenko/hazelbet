@@ -14,6 +14,8 @@ import java.io.Serializable;
 public class Bet implements Serializable {
 
     String id;
+    @Builder.Default
+    long createAt = System.currentTimeMillis();
     Long userId;
     long matchId;
     MatchOutcome outcome;
