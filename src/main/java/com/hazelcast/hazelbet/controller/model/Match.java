@@ -35,7 +35,7 @@ public class Match implements Comparable<Match>, Serializable {
 
     public MatchOutcome getOutcome() {
         if (firstScored == secondScored)
-            return MatchOutcome.X;
+            return MatchOutcome.DRAW;
         if (firstScored > secondScored)
             return MatchOutcome.WIN_1;
         else

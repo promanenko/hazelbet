@@ -98,7 +98,7 @@ public class Initializer implements Serializable {
             case WIN_1:
                 coefficient = match.getWinFirst();
                 break;
-            case X:
+            case DRAW:
                 coefficient = match.getDraw();
                 break;
             case WIN_2:
@@ -173,7 +173,7 @@ public class Initializer implements Serializable {
                         case WIN_1:
                             accumulator[0] += processedBet.getAmount() * processedBet.getCoefficient();
                             break;
-                        case X:
+                        case DRAW:
                             accumulator[1] += processedBet.getAmount() * processedBet.getCoefficient();
                             break;
                         case WIN_2:
