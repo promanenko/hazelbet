@@ -9,6 +9,9 @@
     <map name="inputBets">
         <event-journal enabled="true"/>
     </map>
+    <map name="lastMinBetsSum">
+        <event-journal enabled="true"/>
+    </map>
     <map name="processedBets">
         <indexes>
             <index type="HASH">

@@ -9,4 +9,5 @@ public class HzDistributedObjectNames {
     public static String PROCESSED_BETS_IMAP = "processedBets";
     public static String MATCHES_IMAP = "matches";
     public static String SUSPENDED_MATCHES_IMAP = "suspendedMatches";
+    public static String LAST_MIN_BETS_SUM = "lastMinBetsSum";
 }
