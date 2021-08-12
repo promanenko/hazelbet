@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.INPUT_BETS_IMAP;
+import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.PROCESSED_BETS_IMAP;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(path = "/api/bets")
@@ -31,13 +34,13 @@ public class BetController {
         String betId = UUID.randomUUID().toString();
         inputBet.setId(betId);
         inputBet.setUserId(USER_ID);
-        hazelcast.getMap("inputBets").put(betId, inputBet);
+        hazelcast.getMap(INPUT_BETS_IMAP).put(betId, inputBet);
         return new SubmitBetResponse(betId);
     }
 
     @GetMapping
     public List<ProcessedBet> listBets() {
-        return hazelcast.<String, ProcessedBet>getMap("processedBets")
+        return hazelcast.<String, ProcessedBet>getMap(PROCESSED_BETS_IMAP)
                 .values(entry -> USER_ID.equals(entry.getValue().getUserId()))
                 .stream()
                 .sorted(Comparator.comparing(ProcessedBet::getCreatedAt).reversed())
@@ -46,7 +49,7 @@ public class BetController {
 
     @GetMapping(path = "/{betId}")
     public ProcessedBet getBet(@PathVariable String betId) {
-        return hazelcast.<String, ProcessedBet>getMap("processedBets").get(betId);
+        return hazelcast.<String, ProcessedBet>getMap(PROCESSED_BETS_IMAP).get(betId);
     }
 
 }

@@ -2,10 +2,8 @@ package com.hazelcast.hazelbet.service;
 
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.function.FunctionEx;
-import com.hazelcast.function.ToLongFunctionEx;
 import com.hazelcast.hazelbet.controller.model.Bet;
 import com.hazelcast.hazelbet.controller.model.Match;
-import com.hazelcast.hazelbet.controller.model.MatchOutcome;
 import com.hazelcast.hazelbet.controller.model.User;
 import com.hazelcast.hazelbet.service.model.ProcessedBet;
 import com.hazelcast.jet.config.JobConfig;
@@ -19,18 +17,15 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.Serializable;
 import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
 
-import static com.hazelcast.hazelbet.controller.model.MatchOutcome.WIN_1;
+import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.INPUT_BETS_IMAP;
+import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.PROCESSED_BETS_IMAP;
+import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.SUSPENDED_MATCHES_IMAP;
 import static com.hazelcast.jet.pipeline.JournalInitialPosition.START_FROM_OLDEST;
 
 @Component
@@ -57,7 +52,7 @@ public class Initializer implements Serializable {
     }
 
     private void initSuspendedMatches() {
-        IMap<Long, Long> suspendedMatches = hazelcast.getMap("suspendedMatches");
+        IMap<Long, Long> suspendedMatches = hazelcast.getMap(SUSPENDED_MATCHES_IMAP);
         suspendedMatches.put(1L, 1L);
     }
 
@@ -73,54 +68,8 @@ public class Initializer implements Serializable {
         matches.put(8L, Match.builder().id(8L).firstTeam("Fenerbahce").secondTeam("Besiktas").winFirst(1.9).draw(1.9).winSecond(1.9).build());
     }
 
-    @Scheduled(fixedDelay = 5000)
-    public void updateMatchScores() {
-        IMap<Long, Match> matches = hazelcast.getMap("matches");
-        long matchId = ThreadLocalRandom.current().nextLong(1, 9);
-        Match match = matches.get(matchId);
-        if (ThreadLocalRandom.current().nextBoolean()) {
-            match.toBuilder().firstScored(match.getFirstScored() + 1);
-        } else {
-            match.toBuilder().secondScored(match.getSecondScored() + 1);
-        }
-    }
-
-    @Scheduled(fixedDelay = 1000)
-    public void mockBets() {
-        IMap<Long, Match> matches = hazelcast.getMap("matches");
-
-        long matchId = ThreadLocalRandom.current().nextLong(1, 9);
-        MatchOutcome outcome = MatchOutcome.values()[ThreadLocalRandom.current().nextInt(0, 3)];
-        Match match = matches.get(matchId);
-        double amount = ThreadLocalRandom.current().nextInt(0, 10) == 0 ? 200 : 10;
-        double coefficient;
-        switch (outcome) {
-            case WIN_1:
-                coefficient = match.getWinFirst();
-                break;
-            case DRAW:
-                coefficient = match.getDraw();
-                break;
-            case WIN_2:
-                coefficient = match.getWinSecond();
-                break;
-            default:
-                coefficient = 0;
-        }
-        String betId = UUID.randomUUID().toString();
-        hazelcast.getMap("inputBets").put(betId, Bet.builder()
-                .id(betId)
-                .userId(ThreadLocalRandom.current().nextLong(2, 5))
-                .matchId(matchId)
-                .amount(amount)
-                .outcome(outcome)
-                .coefficient(coefficient)
-                .build()
-        );
-    }
-
     private void streamInputBets() {
-        StreamSource<Map.Entry<String, Bet>> inputBetsSource = Sources.mapJournal("inputBets", START_FROM_OLDEST);
+        StreamSource<Map.Entry<String, Bet>> inputBetsSource = Sources.mapJournal(INPUT_BETS_IMAP, START_FROM_OLDEST);
         Pipeline pipeline = Pipeline.create();
         StreamStage<Map.Entry<String, Bet>> inputBetsStreamStage = pipeline.readFrom(inputBetsSource)
                 .withTimestamps(entry -> entry.getValue().getCreateAt(), 1000);
@@ -163,7 +112,7 @@ public class Initializer implements Serializable {
 
         processedBetStreamStage
 //                .filter(ProcessedBet::isRejected).setName("If rejected") // TODO write non-rejected bets when all checks passed
-                .writeTo(Sinks.map("processedBets", ProcessedBet::getId, FunctionEx.identity()));
+                .writeTo(Sinks.map(PROCESSED_BETS_IMAP, ProcessedBet::getId, FunctionEx.identity()));
 
         processedBetStreamStage
                 .filter(processedBet -> !processedBet.isRejected())
