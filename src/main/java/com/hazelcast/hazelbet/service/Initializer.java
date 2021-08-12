@@ -110,7 +110,7 @@ public class Initializer implements Serializable {
         String betId = UUID.randomUUID().toString();
         hazelcast.getMap("inputBets").put(betId, Bet.builder()
                 .id(betId)
-                .userId(ThreadLocalRandom.current().nextLong(1, 5))
+                .userId(ThreadLocalRandom.current().nextLong(2, 5))
                 .matchId(matchId)
                 .amount(amount)
                 .outcome(outcome)
