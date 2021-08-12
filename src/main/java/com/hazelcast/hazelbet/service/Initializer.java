@@ -5,6 +5,7 @@ import com.hazelcast.hazelbet.controller.model.Bet;
 import com.hazelcast.hazelbet.controller.model.Match;
 import com.hazelcast.hazelbet.controller.model.User;
 import com.hazelcast.hazelbet.service.model.ProcessedBet;
+import com.hazelcast.jet.config.JobConfig;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.Sinks;
 import com.hazelcast.jet.pipeline.Sources;
@@ -86,23 +87,23 @@ public class Initializer implements Serializable {
                             .coefficient(bet.getCoefficient())
                             .outcome(bet.getOutcome())
                             .build();
-                })
+                }).setName("assignBetId")
                 .mapUsingIMap("users", ProcessedBet::getUserId, (ProcessedBet processedBet, User user) -> {
                     if (processedBet.getAmount() > user.getBalance()) {
                         processedBet.setRejected(true);
                         processedBet.setReason("No money");
                     }
                     return processedBet;
-                })
+                }).setName("checkUserBalance")
                 .mapUsingIMap("suspendedMatches", ProcessedBet::getMatchId, (ProcessedBet processedBet, Long match) -> {
                     if (match != null) {
                         processedBet.setRejected(true);
                         processedBet.setReason("Match is suspended");
                     }
                     return processedBet;
-                })
+                }).setName("checkSuspendedMatches")
                 .writeTo(Sinks.logger());
-        hazelcast.getJet().newJob(pipeline);
+        hazelcast.getJet().newJob(pipeline, new JobConfig().setName("processBets"));
     }
 
 }
