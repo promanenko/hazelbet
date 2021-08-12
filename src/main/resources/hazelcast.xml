@@ -5,4 +5,8 @@
     <cluster-name>hazelbet</cluster-name>
 
     <jet enabled="true" resource-upload-enabled="true"/>
+
+    <map name="inputBets">
+        <event-journal enabled="true"/>
+    </map>
 </hazelcast>
