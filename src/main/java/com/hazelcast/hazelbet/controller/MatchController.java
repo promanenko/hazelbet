@@ -8,9 +8,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.MATCHES_IMAP;
+import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.SUSPENDED_MATCHES_IMAP;
 
 @RestController
 @RequiredArgsConstructor
@@ -21,9 +23,13 @@ public class MatchController {
 
     @GetMapping
     public List<Match> listMatches() {
+        Set<Long> suspendedMatchIds = hazelcast.<Long, Long>getMap(SUSPENDED_MATCHES_IMAP).keySet();
         return hazelcast.<Long, Match>getMap(MATCHES_IMAP).values().stream()
                 .sorted()
                 .peek(match -> {
+                    if (suspendedMatchIds.contains(match.getId())) {
+                        match.setSuspended(true);
+                    }
                     match.setWinFirst(formatDouble(match.getWinFirst()));
                     match.setDraw(formatDouble(match.getDraw()));
                     match.setWinSecond(formatDouble(match.getWinSecond()));
@@ -32,7 +38,7 @@ public class MatchController {
     }
 
     private double formatDouble(double input) {
-        return (double)((int)(input *100.0))/100.0;
+        return ((int) (input * 100.0)) / 100.0;
     }
 
 }

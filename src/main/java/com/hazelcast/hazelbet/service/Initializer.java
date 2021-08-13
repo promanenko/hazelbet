@@ -39,6 +39,7 @@ import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.PROCESSED_BE
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.SUSPENDED_MATCHES_IMAP;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.USERS_IMAP;
 import static com.hazelcast.jet.Util.entry;
+import static com.hazelcast.jet.aggregate.AggregateOperations.averagingDouble;
 import static com.hazelcast.jet.aggregate.AggregateOperations.summingDouble;
 import static com.hazelcast.jet.pipeline.JournalInitialPosition.START_FROM_OLDEST;
 import static com.hazelcast.jet.pipeline.WindowDefinition.sliding;
@@ -83,7 +84,7 @@ public class Initializer {
 
     private void initUsers() {
         IMap<Long, User> users = hazelcast.getMap("users");
-        users.put(1L, new User(1L, "hazelcast_user", 500));
+        users.put(1L, new User(1L, "hazelcast_user", 5000000));
         users.put(2L, new User(2L, "dummy_user_2", 500_000));
         users.put(3L, new User(3L, "dummy_user_3", 500_000));
         users.put(4L, new User(4L, "dummy_user_4", 500_000));
@@ -168,18 +169,18 @@ public class Initializer {
                 .filter(processedBet -> !processedBet.isRejected())
                 .window(sliding(MINUTES.toMillis(1), SECONDS.toMillis(1)).setEarlyResultsPeriod(1000))
                 .groupingKey(ProcessedBet::getMatchId)
-                .aggregate(summingDouble(ProcessedBet::getAmount))
+                .aggregate(averagingDouble(ProcessedBet::getAmount))
                 .writeTo(Sinks.map(LAST_MIN_BETS_SUM));
         processedBetStreamStage
                 .window(sliding(SECONDS.toMillis(10), SECONDS.toMillis(1)))
                 .groupingKey(ProcessedBet::getMatchId)
-                .aggregate(summingDouble(ProcessedBet::getAmount))
-                .mapUsingIMap(LAST_MIN_BETS_SUM, KeyedWindowResult::getKey, (KeyedWindowResult<Long, Double> matchIdAndLast10Sum, Double lastMinSum) -> {
-                    if (lastMinSum == null) return null;
-                    Long key = matchIdAndLast10Sum.getKey();
-                    return entry(key, matchIdAndLast10Sum.getValue() > lastMinSum ? key : null);
+                .aggregate(averagingDouble(ProcessedBet::getAmount))
+                .mapUsingIMap(LAST_MIN_BETS_SUM, KeyedWindowResult::getKey, (KeyedWindowResult<Long, Double> matchIdAndLast10Avg, Double lastMinAvg) -> {
+                    if (lastMinAvg == null) return null;
+                    return entry(matchIdAndLast10Avg.getKey(), entry(matchIdAndLast10Avg.getValue(), lastMinAvg));
                 })
                 .filter(Objects::nonNull)
+                .map(it -> entry(it.getKey(), it.getValue().getKey() > it.getValue().getValue() * 2 ? it.getKey() : null))
                 .writeTo(Sinks.mapWithMerging(SUSPENDED_MATCHES_IMAP, (oldOne, newOne) -> newOne));
 
         StreamStage<Match> recalculateCoefsStage = processedBetStreamStage
@@ -209,31 +210,31 @@ public class Initializer {
                     double win2Loss = bet.getSumWin2() * probabilities.get(2) / 100;
                     double currentMargin = (bet.getTotal() - win1Loss - drawLoss - win2Loss) / bet.getTotal();
 //                    if (currentMargin < 0.2) {
-                        // what contributes to our lost the most ?
-                        Map<MatchOutcome, Double> outcomesToLosses =
-                                Map.of(MatchOutcome.WIN_1, win1Loss, MatchOutcome.DRAW, drawLoss, MatchOutcome.WIN_2, win2Loss);
-                        List<MatchOutcome> outcomesByImpact = outcomesToLosses.entrySet().stream()
-                                .sorted(Map.Entry.comparingByValue())
-                                .map(Map.Entry::getKey)
-                                .sorted(Collections.reverseOrder())
-                                .collect(Collectors.toList());
-                        List<Double> newCoefficients = calculateCoefficients(match.getStrengthDiff(), match.getGoalsDiff());
-                        // decrease coefficients for the first two results with the biggest impact
-                        int biggestOrdinal = outcomesByImpact.get(0).ordinal();
-                        newCoefficients.set(biggestOrdinal, newCoefficients.get(biggestOrdinal) * 0.8);
-                        int secondOrdinal = outcomesByImpact.get(1).ordinal();
-                        newCoefficients.set(secondOrdinal, newCoefficients.get(secondOrdinal) * 0.9);
+                    // what contributes to our lost the most ?
+                    Map<MatchOutcome, Double> outcomesToLosses =
+                            Map.of(MatchOutcome.WIN_1, win1Loss, MatchOutcome.DRAW, drawLoss, MatchOutcome.WIN_2, win2Loss);
+                    List<MatchOutcome> outcomesByImpact = outcomesToLosses.entrySet().stream()
+                            .sorted(Map.Entry.comparingByValue())
+                            .map(Map.Entry::getKey)
+                            .sorted(Collections.reverseOrder())
+                            .collect(Collectors.toList());
+                    List<Double> newCoefficients = calculateCoefficients(match.getStrengthDiff(), match.getGoalsDiff());
+                    // decrease coefficients for the first two results with the biggest impact
+                    int biggestOrdinal = outcomesByImpact.get(0).ordinal();
+                    newCoefficients.set(biggestOrdinal, newCoefficients.get(biggestOrdinal) * 0.8);
+                    int secondOrdinal = outcomesByImpact.get(1).ordinal();
+                    newCoefficients.set(secondOrdinal, newCoefficients.get(secondOrdinal) * 0.9);
 
-                        // update coefs
-                        match.setWinFirst(newCoefficients.get(0));
-                        match.setDraw(newCoefficients.get(1));
-                        match.setWinSecond(newCoefficients.get(2));
+                    // update coefs
+                    match.setWinFirst(newCoefficients.get(0));
+                    match.setDraw(newCoefficients.get(1));
+                    match.setWinSecond(newCoefficients.get(2));
 //                    }
                     return match;
                 }).setName("Recalculate coefficients");
 
-        recalculateCoefsStage
-                .writeTo(Sinks.logger());
+//        recalculateCoefsStage
+//                .writeTo(Sinks.logger());
 
         recalculateCoefsStage
                 .writeTo(Sinks.mapWithUpdating(MATCHES_IMAP, Match::getId, (Match oldMatch, Match newMatch) -> {

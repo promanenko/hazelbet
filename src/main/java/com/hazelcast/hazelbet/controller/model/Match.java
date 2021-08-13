@@ -14,6 +14,7 @@ public class Match implements Comparable<Match>, Serializable {
     long id;
     String firstTeam;
     String secondTeam;
+    boolean suspended;
     double winFirst;
     double draw;
     double winSecond;
