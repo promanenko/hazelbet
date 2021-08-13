@@ -124,6 +124,7 @@ public class Initializer {
         StreamSource<Map.Entry<String, Bet>> inputBetsSource = Sources.mapJournal(INPUT_BETS_IMAP, START_FROM_OLDEST);
         StreamStage<ProcessedBet> processedBetStreamStage = pipeline.readFrom(inputBetsSource)
                 .withTimestamps(entry -> entry.getValue().getCreateAt(), 1000)
+                .setName("Read from 'inputBets' IMap")
                 .map(stringBetEntry -> {
                     Bet bet = stringBetEntry.getValue();
                     return ProcessedBet.builder()
@@ -156,35 +157,43 @@ public class Initializer {
 
         processedBetStreamStage
 //                .filter(ProcessedBet::isRejected).setName("If rejected") // TODO write non-rejected bets when all checks passed
-                .writeTo(Sinks.map(PROCESSED_BETS_IMAP, ProcessedBet::getId, FunctionEx.identity()));
+                .writeTo(Sinks.map(PROCESSED_BETS_IMAP, ProcessedBet::getId, FunctionEx.identity()))
+                .setName("Write processed bets to 'processedBets' IMap");
 
-        processedBetStreamStage
-                .filter(processedBet -> !processedBet.isRejected()).setName("If rejected")
+        StreamStage<ProcessedBet> nonRejectedProcessedBets = processedBetStreamStage
+                .filter(processedBet -> !processedBet.isRejected())
+                .setName("If not rejected");
+        nonRejectedProcessedBets
                 .writeTo(Sinks.mapWithUpdating(USERS_IMAP, ProcessedBet::getUserId, (User user, ProcessedBet bet) -> {
                     user.setBalance(user.getBalance() - bet.getAmount());
                     return user;
-                }));
+                }))
+                .setName("Deduct bet amount from user balance in 'users' IMap");
 
-        processedBetStreamStage
-                .filter(processedBet -> !processedBet.isRejected())
+        nonRejectedProcessedBets
                 .window(sliding(MINUTES.toMillis(1), SECONDS.toMillis(1)).setEarlyResultsPeriod(1000))
                 .groupingKey(ProcessedBet::getMatchId)
                 .aggregate(averagingDouble(ProcessedBet::getAmount))
-                .writeTo(Sinks.map(LAST_MIN_BETS_SUM));
-        processedBetStreamStage
+                .setName("Count average for the sliding window of 1 minute")
+                .writeTo(Sinks.map(LAST_MIN_BETS_SUM))
+                .setName("Write 1 minute window averages to 'lastMinBetsSum' IMap");
+        nonRejectedProcessedBets
                 .window(sliding(SECONDS.toMillis(10), SECONDS.toMillis(1)))
                 .groupingKey(ProcessedBet::getMatchId)
                 .aggregate(averagingDouble(ProcessedBet::getAmount))
+                .setName("Count average for the sliding window of 10 seconds")
                 .mapUsingIMap(LAST_MIN_BETS_SUM, KeyedWindowResult::getKey, (KeyedWindowResult<Long, Double> matchIdAndLast10Avg, Double lastMinAvg) -> {
                     if (lastMinAvg == null) return null;
                     return entry(matchIdAndLast10Avg.getKey(), entry(matchIdAndLast10Avg.getValue(), lastMinAvg));
                 })
+                .setName("Enrich stream with 1 minute window averages using 'lastMinBetsSum' IMap")
                 .filter(Objects::nonNull)
                 .map(it -> entry(it.getKey(), it.getValue().getKey() > it.getValue().getValue() * 2 ? it.getKey() : null))
-                .writeTo(Sinks.mapWithMerging(SUSPENDED_MATCHES_IMAP, (oldOne, newOne) -> newOne));
+                .setName("If last 10 seconds avg bet > than 2 * last 1m avg bet => suspend betting for match")
+                .writeTo(Sinks.mapWithMerging(SUSPENDED_MATCHES_IMAP, (oldOne, newOne) -> newOne))
+                .setName("Add or remove entry from 'suspendedMatches' IMap");
 
-        StreamStage<Match> recalculateCoefsStage = processedBetStreamStage
-                .filter(processedBet -> !processedBet.isRejected())
+        StreamStage<Match> recalculateCoefsStage = nonRejectedProcessedBets
                 .groupingKey(ProcessedBet::getMatchId)
                 .mapStateful(() -> new double[4], (accumulator, matchId, processedBet) -> {
                     switch (processedBet.getOutcome()) {
@@ -202,6 +211,7 @@ public class Initializer {
                     accumulator[3] += processedBet.getAmount();
                     return new CombinedBet(processedBet, accumulator[0], accumulator[1], accumulator[2], accumulator[3]);
                 })
+                .setName("Count bets sum and projected payouts")
                 .mapUsingIMap(MATCHES_IMAP, (CombinedBet it) -> it.getBet().getMatchId(), (CombinedBet bet, Match match) -> {
                     // get realistic coefficients
                     List<Integer> probabilities = getProbabilities(match.getStrengthDiff(), match.getGoalsDiff());
@@ -245,7 +255,8 @@ public class Initializer {
                     oldMatch.setWinSecondTrend(MatchOutcomeTrend.fromDiff(newMatch.getWinSecond() - oldMatch.getWinSecond()));
                     oldMatch.setWinSecond(newMatch.getWinSecond());
                     return oldMatch;
-                }));
+                }))
+                .setName("Update match coefficients in 'matches' IMap");
 
         hazelcast.getJet().newJob(pipeline, new JobConfig().setName("processBets"));
     }
