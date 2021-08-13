@@ -25,7 +25,7 @@ export const MatchRow = {
         ...Vuex.mapActions(['showBetWindow'])
     },
     template: `
-        <tr>
+        <tr :class="data.suspended ? 'table-danger' : ''">
           <td>{{ data.firstTeam }} - {{ data.secondTeam }}</td>
           <td><b>{{ data.firstScored  }} : {{ data.secondScored }}</b></td>
           <td class="clickable" @click="setFirstTeamBet"> {{ data.winFirst }} <indicator :state="data.winFirstTrend" /></td>
