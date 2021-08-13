@@ -7,7 +7,9 @@ export const BetOverlay = {
       return {
           betId: null,
           processing: false,
-          betAmount: '10'
+          betAmount: '10',
+          error: null,
+          success: false,
       }
     },
     computed: {
@@ -51,17 +53,18 @@ export const BetOverlay = {
     },
     methods: {
         onClose() {
-            clearTimeout(this.timer)
             this.betAmount = '10'
             this.betId = null
             this.processing = false
+            this.error = null
+            this.success = false
             this.hideBetWindow()
         },
         makeBet() {
             (async() => {
                 try {
                     this.processing = true
-                    const { betId } = await api('/bets', {
+                    const { rejected, reason } = await api('/bets', {
                         method: 'POST',
                         body: JSON.stringify({
                             matchId: this.data.matchId,
@@ -71,20 +74,13 @@ export const BetOverlay = {
                         })
                     })
 
-                    if (betId) {
-                        const getStatus = async () => {
-                            try {
-                                const res = await api(`/bets/${betId}`)
-                                if (res) {
-                                    this.onClose()
-                                }
-                            } catch (e) {
-                                this.timer = setTimeout(getStatus, 1000)
-                            }
-                        }
-
-                        getStatus()
+                    if (rejected && reason) {
+                        this.error = reason
+                    } else {
+                        this.success = true
                     }
+
+
                 } catch(e) {
                     console.log(e)
                 }
@@ -92,24 +88,25 @@ export const BetOverlay = {
         },
         ...Vuex.mapActions(['hideBetWindow']),
     },
-    unmounted() {
-        clearTimeout(this.timer)
-    },
     template: `
         <overlay v-if="data" :onClose="onClose">
             <template v-slot:content>
-                <div v-if="!processing">
-                    <h2>
-                        {{ title }} <span class="float-end">{{  coefficient }}</span>
-                    </h2>
-                    <span class="caption">{{ caption }}</span>
-                    <div class="mb-3">
-                        <label for="amount" class="form-label">Amount</label>
-                        <input class="form-control" id="amount" v-maska="{ mask: '#*.##'}" v-model="betAmount" />
+                <div v-if="!success && !error">
+                    <div v-if="!processing">
+                        <h2>
+                            {{ title }} <span class="float-end">{{  coefficient }}</span>
+                        </h2>
+                        <span class="caption">{{ caption }}</span>
+                        <div class="mb-3">
+                            <label for="amount" class="form-label">Amount</label>
+                            <input class="form-control" id="amount" v-maska="{ mask: '#*.##'}" v-model="betAmount" />
+                        </div>
+                        <span>Possible win: {{ possibleWin }}</span>
                     </div>
-                    <span>Possible win: {{ possibleWin }}</span>
+                    <spinner v-if="processing" />
                 </div>
-                <spinner v-if="processing" />
+                <span v-if="success" class="success">Bet has been made</span>
+                <span v-if="error" class="warning">{{ error }}</span>
             </template>
             <template v-slot:footer>
                 <button v-if="!processing" class="btn btn-primary me-2" @click="makeBet" :disabled="processing">
