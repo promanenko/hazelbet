@@ -23,7 +23,16 @@ public class MatchController {
     public List<Match> listMatches() {
         return hazelcast.<Long, Match>getMap(MATCHES_IMAP).values().stream()
                 .sorted()
+                .peek(match -> {
+                    match.setWinFirst(formatDouble(match.getWinFirst()));
+                    match.setDraw(formatDouble(match.getDraw()));
+                    match.setWinSecond(formatDouble(match.getWinSecond()));
+                })
                 .collect(Collectors.toList());
+    }
+
+    private double formatDouble(double input) {
+        return (double)((int)(input *100.0))/100.0;
     }
 
 }
