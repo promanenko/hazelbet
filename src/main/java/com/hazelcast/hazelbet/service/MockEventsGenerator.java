@@ -29,14 +29,19 @@ public class MockEventsGenerator {
         matches.computeIfPresent(matchId, (key, match) -> first
                 ? match.toBuilder().firstScored(match.getFirstScored() + 1).build()
                 : match.toBuilder().secondScored(match.getSecondScored() + 1).build());
+        // TODO this is a fake bet to trigger coefficients adjustment
+        randomBetForMatch(matchId);
     }
 
     @Scheduled(initialDelay = 1000, fixedDelay = 1000)
     public void mockBets() {
-        IMap<Long, Match> matches = hazelcast.getMap(MATCHES_IMAP);
-
         long matchId = ThreadLocalRandom.current().nextLong(1, 9);
+        randomBetForMatch(matchId);
+    }
+
+    private void randomBetForMatch(long matchId) {
         MatchOutcome outcome = MatchOutcome.values()[ThreadLocalRandom.current().nextInt(0, 3)];
+        IMap<Long, Match> matches = hazelcast.getMap(MATCHES_IMAP);
         Match match = matches.get(matchId);
         double amount = ThreadLocalRandom.current().nextInt(0, 10) == 0 ? 200 : 10;
         double coefficient;

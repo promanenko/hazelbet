@@ -30,12 +30,13 @@ public class BetController {
     private final HazelcastInstance hazelcast;
 
     @PostMapping
-    public SubmitBetResponse submitBet(@RequestBody Bet inputBet) {
+    public ProcessedBet submitBet(@RequestBody Bet inputBet) {
         String betId = UUID.randomUUID().toString();
         inputBet.setId(betId);
         inputBet.setUserId(USER_ID);
         hazelcast.getMap(INPUT_BETS_IMAP).put(betId, inputBet);
-        return new SubmitBetResponse(betId);
+        nap(); // TODO use non-blocking
+        return hazelcast.<String, ProcessedBet>getMap(PROCESSED_BETS_IMAP).get(betId);
     }
 
     @GetMapping
@@ -50,6 +51,14 @@ public class BetController {
     @GetMapping(path = "/{betId}")
     public ProcessedBet getBet(@PathVariable String betId) {
         return hazelcast.<String, ProcessedBet>getMap(PROCESSED_BETS_IMAP).get(betId);
+    }
+
+    private void nap() {
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
 }

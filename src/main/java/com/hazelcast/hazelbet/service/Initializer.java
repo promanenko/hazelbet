@@ -37,6 +37,7 @@ import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.LAST_MIN_BET
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.MATCHES_IMAP;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.PROCESSED_BETS_IMAP;
 import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.SUSPENDED_MATCHES_IMAP;
+import static com.hazelcast.hazelbet.utils.HzDistributedObjectNames.USERS_IMAP;
 import static com.hazelcast.jet.Util.entry;
 import static com.hazelcast.jet.aggregate.AggregateOperations.summingDouble;
 import static com.hazelcast.jet.pipeline.JournalInitialPosition.START_FROM_OLDEST;
@@ -155,6 +156,13 @@ public class Initializer {
         processedBetStreamStage
 //                .filter(ProcessedBet::isRejected).setName("If rejected") // TODO write non-rejected bets when all checks passed
                 .writeTo(Sinks.map(PROCESSED_BETS_IMAP, ProcessedBet::getId, FunctionEx.identity()));
+
+        processedBetStreamStage
+                .filter(processedBet -> !processedBet.isRejected()).setName("If rejected")
+                .writeTo(Sinks.mapWithUpdating(USERS_IMAP, ProcessedBet::getUserId, (User user, ProcessedBet bet) -> {
+                    user.setBalance(user.getBalance() - bet.getAmount());
+                    return user;
+                }));
 
         processedBetStreamStage
                 .filter(processedBet -> !processedBet.isRejected())
